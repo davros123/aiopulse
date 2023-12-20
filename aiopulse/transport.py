@@ -155,11 +155,26 @@ class HubTransportTcp(HubTransportBase):
         else:
             _LOGGER.warning(f"{self.host}: Not connected")
 
+    async def reconnect(self):
+        """Reconnect to the hub."""
+        try:
+            if self.writer:
+                await self.close()
+            await self.connect()
+            _LOGGER.warning(f"{self.host}: Reconnected to the hub.")
+        except Exception as e:
+            _LOGGER.error(f"{self.host}: Failed to reconnect: {e}")
+            raise  # Re-raise the exception to inform the caller
+
     def send(self, buffer):
         """Abstraction of the underlying transport to send a buffer."""
         if not self.writer or self.writer.is_closing():
             raise NotConnectedException
-        self.writer.write(buffer)
+        try:
+            self.writer.write(buffer)
+        except NotConnectedException:
+            asyncio.create_task(self.reconnect())  # async reconnection
+            raise  # Re-raise to inform the caller
 
     async def receive(self):
         """Receive from stream."""
